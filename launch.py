@@ -62,8 +62,12 @@ def main():
     actions = parser.add_mutually_exclusive_group()
     actions.add_argument('--validate-map', action='store_true', help='Validate the input project for map export and exit')
     actions.add_argument('--export-map', metavar='OUTPUT.map', help='Write a native Rust map and exit')
+    actions.add_argument('--export-prefab', metavar='OUTPUT.{asset,prefab}',
+                         help='Write a RustEdit 2 monument or legacy prefab bundle and exit')
     actions.add_argument('--export-report', metavar='OUTPUT.docx', help='Write a Word project report and exit')
-    parser.add_argument('--require-ground', action='store_true', help='Require native ground for map validation or export')
+    parser.add_argument('--require-ground', action='store_true', help='Require native ground for validation or export')
+    parser.add_argument('--terrain-width', type=int, help='Prefab export terrain width in metres; zero fits the placements')
+    parser.add_argument('--terrain-fade', type=int, help='Prefab export terrain edge fade in metres (default: 5)')
     parser.add_argument('--overwrite', action='store_true', help='Allow the one-shot export to replace the output file')
     args = parser.parse_args()
     if (args.mcp_port is not None or args.rust_install) and not args.headless:
@@ -73,7 +77,9 @@ def main():
     project = Path(args.project).expanduser().resolve() if args.project else None
     if project and (project.suffix.lower() not in ('.map', '.prefab', '.ruster') or not project.is_file()):
         parser.error('Choose an existing .map, .prefab or .ruster file')
-    output = args.export_map if args.export_map is not None else args.export_report
+    exports = {'export_map': ('.map',), 'export_prefab': ('.asset', '.prefab'), 'export_report': ('.docx',)}
+    action = next((name for name in exports if getattr(args, name) is not None), None)
+    output = getattr(args, action) if action else None
     batch = None
     if args.validate_map or output is not None:
         if args.headless or args.background or args.user_dir is not None:
@@ -81,18 +87,24 @@ def main():
         if project is None or project.suffix.lower() == '.map':
             parser.error('One-shot commands need a .ruster or .prefab input; opening a .map only imports placements')
         batch = {'action': 'validate_map', 'require_ground': args.require_ground}
-        if output is not None:
-            exporting_map = args.export_map is not None
+        if action:
             destination = Path(output).expanduser().resolve()
-            extension = '.map' if exporting_map else '.docx'
-            if destination.suffix.lower() != extension:
-                parser.error(f'The destination must end with {extension}')
-            batch.update(action='export_map' if exporting_map else 'export_report',
-                         path=str(destination), overwrite=args.overwrite)
+            extensions = exports[action]
+            if destination.suffix.lower() not in extensions:
+                parser.error('The destination must end with ' + ' or '.join(extensions))
+            batch.update(action=action, path=str(destination), overwrite=args.overwrite)
     if args.overwrite and output is None:
         parser.error('--overwrite requires an export')
-    if args.require_ground and not (args.validate_map or args.export_map is not None):
-        parser.error('--require-ground requires --validate-map or --export-map')
+    if args.require_ground and not (args.validate_map or action in ('export_map', 'export_prefab')):
+        parser.error('--require-ground requires --validate-map, --export-map or --export-prefab')
+    if args.terrain_width is not None or args.terrain_fade is not None:
+        if action != 'export_prefab':
+            parser.error('--terrain-width and --terrain-fade require --export-prefab')
+        if args.terrain_width is not None and not 0 <= args.terrain_width <= 32768:
+            parser.error('--terrain-width must be between 0 and 32768 metres')
+        if args.terrain_fade is not None and not 1 <= args.terrain_fade <= 16383:
+            parser.error('--terrain-fade must be between 1 and 16383 metres')
+        batch.update(terrain_width=args.terrain_width or 0, terrain_fade=args.terrain_fade or 5)
     scratch = None
     try:
         executable = find_blender(args.blender)

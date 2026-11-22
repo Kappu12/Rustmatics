@@ -5,6 +5,7 @@ import math
 import struct
 import time
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, StringProperty
@@ -15,7 +16,8 @@ from . import app, scene, placement
 from .assets import catalog
 from .core import rustedit_terrain, wire
 from .core.asset_categories import GROUPS
-from .core.rust_map import prefab_transform, update_transform
+from .core.project import atomic_write
+from .core.rust_map import prefab_id, prefab_transform, update_transform
 from .core.rustedit_prefab import RustEditPrefab
 from .ui_style import invoke_dialog
 
@@ -229,7 +231,7 @@ def import_prefab(path):
         raise
 
 
-def _terrain_width(roots, origin, fade):
+def _terrain_width(roots, origin, fade, *, circular=True):
     from . import mcp_building
     children=mcp_building.hierarchy()
     bounds={}
@@ -241,8 +243,65 @@ def _terrain_width(roots, origin, fade):
                  for axis in (0,1))
         else:
             x,y=(obj.matrix_world.translation-origin)[:2]
-        radius=max(radius,math.hypot(x,y))
+        reach = math.hypot(x, y) if circular else max(abs(x), abs(y))
+        radius = max(radius, reach)
     return math.ceil(2*(radius+fade))
+
+
+def _export_monument(path, records, roots, origin, source, companions, *,
+                     include_terrain, terrain_width, terrain_fade, overwrite):
+    from . import editing
+    from .core import rustedit_monument
+
+    if source and source.populated_extensions:
+        raise ValueError('RustEdit 2 export cannot translate linked ' + ', '.join(source.populated_extensions))
+    state = bpy.context.scene.ruster
+    native = state.mode == 'MAP' and state.native_ground
+    legacy = bool(set(rustedit_terrain.TERRAIN_SUFFIXES) & companions.keys())
+    if include_terrain is None:
+        include_terrain = native or legacy
+    if type(include_terrain) is not bool:
+        raise ValueError('Include terrain must be a boolean')
+
+    size = _terrain_width(roots, origin, 0, circular=False)
+    stamp, masks = None, {}
+    if include_terrain:
+        if type(terrain_width) is not int or terrain_width < 0:
+            raise ValueError('Terrain width must be a positive whole number or zero for automatic sizing')
+        if type(terrain_fade) is not int or terrain_fade < 1:
+            raise ValueError('Terrain edge fade must be a positive whole number')
+        if native:
+            width = terrain_width or size + 2 * terrain_fade
+            size = rustedit_monument.canvas_size(max(size, width))
+            stamp = rustedit_monument.capture(editing.terrain(), origin, size, width, terrain_fade)
+        elif legacy:
+            options = wire.parse(wire.get(source.fields, 1, b''))
+            width, fade = wire.get(options, 1, 0), wire.get(options, 2, 0)
+            if terrain_width:
+                raise ValueError('Imported terrain has a fixed width. Add native ground to choose a new capture area')
+            if width < 2:
+                raise ValueError('The legacy prefab is missing its terrain width')
+            size = rustedit_monument.canvas_size(max(size, width))
+            document, layers = rustedit_terrain.decode_companions(companions, width)
+            stamp = rustedit_monument.capture(document, (0, 0, 0), size, width, fade,
+                                             circular=True, enabled=layers)
+            masks = {name: wire.get(options, i, mask) & mask
+                     for i, (name, mask) in enumerate(rustedit_monument.LAYER_MASKS.items(), 3)}
+        else:
+            raise ValueError('Open a project with native ground or a RustEdit prefab with terrain companions')
+    size = rustedit_monument.canvas_size(size)
+
+    paths = {}
+    cache = scene.cache_dir()
+    if (cache / 'catalog.sqlite3').is_file():
+        with closing(catalog.read_connection(cache)) as database:
+            for uid in set(map(prefab_id, records)):
+                row = database.execute('SELECT path FROM names WHERE uid=?', (uid,)).fetchone()
+                if row:
+                    paths[uid] = row[0]
+    atomic_write(path, rustedit_monument.encode(records, size, stamp=stamp, masks=masks, prefab_paths=paths),
+                 overwrite=overwrite)
+    return [path]
 
 
 def export_prefab(path, selected=True, *, include_terrain=None, terrain_width=0,
@@ -253,7 +312,9 @@ def export_prefab(path, selected=True, *, include_terrain=None, terrain_width=0,
     objects=[obj for obj in layer.objects if obj.select_get(view_layer=layer)] if selected else []
     roots=placement.selected_prefabs(objects) if objects else scene.prefab_roots()
     if not roots:raise ValueError('The composition has no prefab placements to export' if not objects else 'Select prefab placements or a prefab group')
-    active=layer.objects.active
+    path = Path(path)
+    is_monument = path.suffix.lower() == '.asset'
+    active = layer.objects.active if selected or not is_monument else None
     groups = {next((parent for parent in placement.parent_chain(obj)
                     if parent.get('ruster_prefab_source')),None) for obj in roots}
     if len(groups)>1:
@@ -278,6 +339,12 @@ def export_prefab(path, selected=True, *, include_terrain=None, terrain_width=0,
         origin = (active.matrix_world.translation.copy() if active and active.get('ruster_kind') == 'GROUP'
                   else bpy.context.scene.cursor.location.copy())
     records = prefab_records(roots, origin)
+    if is_monument:
+        if preview_png:
+            raise ValueError('External preview images are only supported for .prefab exports')
+        return _export_monument(path, records, roots, origin, source, companions,
+                                include_terrain=include_terrain, terrain_width=terrain_width,
+                                terrain_fade=terrain_fade, overwrite=overwrite)
     if source:source.replace_prefabs(records)
     else:source = RustEditPrefab.create(records)
     state = bpy.context.scene.ruster
@@ -297,8 +364,9 @@ def export_prefab(path, selected=True, *, include_terrain=None, terrain_width=0,
         companions.update(rustedit_terrain.capture(document,origin,width))
     if preview_png:
         companions['.png']=rustedit_terrain.read_png(preview_png)
-    return rustedit_terrain.write_bundle(Path(path).with_suffix('.prefab'), source.write(),
-                                         companions, overwrite=overwrite)
+    if path.suffix.lower() != '.prefab':
+        path = path.with_suffix('.prefab')
+    return rustedit_terrain.write_bundle(path, source.write(), companions, overwrite=overwrite)
 
 
 def menu_signature():
@@ -463,6 +531,36 @@ class RUSTER_OT_prefab_export(bpy.types.Operator, ExportHelper):
         except Exception as error:self.report({'ERROR'}, str(error));return {'CANCELLED'}
 
 
+class RUSTER_OT_monument_export(bpy.types.Operator, ExportHelper):
+    bl_idname = 'ruster.monument_export'
+    bl_label = 'Export RustEdit 2 Monument'
+    bl_description = 'Export prefab placements and embedded terrain as a RustEdit 2 monument'
+    filename_ext = '.asset'
+    filter_glob: StringProperty(default='*.asset', options={'HIDDEN'})
+    selected_only: BoolProperty(name='Use Selection When Available', default=True)
+    include_terrain: BoolProperty(name='Include Terrain', default=True)
+    terrain_width: IntProperty(name='Terrain Width (m)', description='Width of the terrain stamp; zero fits the placements', default=0, min=0, max=2048)
+    terrain_fade: IntProperty(name='Terrain Edge Fade (m)', default=5, min=1, max=1023)
+
+    def draw(self, context):
+        self.layout.prop(self, 'selected_only')
+        self.layout.prop(self, 'include_terrain')
+        if self.include_terrain and context.scene.ruster.native_ground:
+            self.layout.prop(self, 'terrain_width')
+            self.layout.prop(self, 'terrain_fade')
+
+    def execute(self, context):
+        try:
+            path = Path(self.filepath).with_suffix('.asset')
+            export_prefab(path, self.selected_only, include_terrain=None if self.include_terrain else False,
+                          terrain_width=self.terrain_width, terrain_fade=self.terrain_fade, overwrite=path.is_file())
+            self.report({'INFO'}, 'Exported ' + path.name)
+            return {'FINISHED'}
+        except (OSError, ValueError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+
+
 def model_formats(_operator, _context):
     global _model_items
     from .model_export import available_formats
@@ -517,7 +615,8 @@ class RUSTER_OT_edit_mode(bpy.types.Operator):
 def register():
     _category_menus.update(('@'+key,category_menu(key,label)) for key,label,_patterns in GROUPS)
     classes = [RUSTER_OT_io_settings, RUSTER_OT_add_prefab, RUSTER_MT_add, *_category_menus.values(), RUSTER_OT_prefab_import,
-               RUSTER_OT_prefab_export, RUSTER_OT_model_export, RUSTER_OT_blend_export, RUSTER_OT_edit_mode]
+               RUSTER_OT_prefab_export, RUSTER_OT_monument_export, RUSTER_OT_model_export,
+               RUSTER_OT_blend_export, RUSTER_OT_edit_mode]
     for cls in classes:bpy.utils.register_class(cls);_classes.append(cls)
     if not bpy.app.background:bpy.app.timers.register(warm_prefab_menu,first_interval=.1,persistent=True)
     config = bpy.context.window_manager.keyconfigs.addon

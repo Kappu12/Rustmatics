@@ -40,6 +40,7 @@ ACTIONS={
     'ruster.save':('Save Project','save'),
     'ruster.prefab_import':('Import RustEdit Prefab…','import'),
     'ruster.prefab_export':('Export RustEdit Prefab…','export'),
+    'ruster.monument_export':('Export RustEdit 2 Monument…','export'),
     'ruster.model_export':('Export Models…','export'),
     'ruster.blend_export':('Export Blender File (.blend)…','export'),
     'ruster.io_settings':('Rust IO Settings…','settings'),

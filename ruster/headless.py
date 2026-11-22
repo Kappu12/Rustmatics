@@ -30,11 +30,22 @@ def run_batch(project, options):
             path = mcp_bridge.file_target(options['path'], '.map', overwrite)
             map_prefabs.export_map(path, overwrite=overwrite, require_ground=require_ground)
             result = {'path': str(path)}
-        else:
+        elif action == 'export_prefab':
+            from .core.rustedit_terrain import EXPORT_EXTENSIONS
+            if require_ground and not bpy.context.scene.ruster.native_ground:
+                raise ValueError('Prefab export requires native Rust ground')
+            overwrite = options['overwrite']
+            path = mcp_bridge.file_target(options['path'], EXPORT_EXTENSIONS, overwrite)
+            files = studio.export_prefab(path, selected=False, terrain_width=options.get('terrain_width', 0),
+                                         terrain_fade=options.get('terrain_fade', 5), overwrite=overwrite)
+            result = {'path': str(files[-1]), 'companions': [str(file) for file in files[:-1]]}
+        elif action == 'export_report':
             from . import project_report
             overwrite = options['overwrite']
             path = mcp_bridge.file_target(options['path'], '.docx', overwrite)
             result = project_report.export(path, overwrite=overwrite)
+        else:
+            raise ValueError('Unknown one-shot operation')
         result.update(action=action, prefab_count=len(scene.prefab_roots()),
                       native_ground=bpy.context.scene.ruster.native_ground)
         print('RUSTER_BATCH_RESULT ' + json.dumps(result), flush=True)

@@ -12,20 +12,30 @@ substitute `./Rustmatics.sh` and use absolute Linux paths.
 ```bat
 Rustmatics.cmd "C:\maps\Project.ruster" --validate-map --require-ground
 Rustmatics.cmd "C:\maps\Project.ruster" --export-map "C:\maps\Project.map" --require-ground
+Rustmatics.cmd "C:\maps\Project.ruster" --export-prefab "C:\maps\Monument.asset" --require-ground
+Rustmatics.cmd "C:\maps\Project.ruster" --export-prefab "C:\maps\Legacy.prefab" --require-ground
 Rustmatics.cmd "C:\maps\Project.ruster" --export-report "C:\maps\Project Report.docx"
 ```
 
 From source, substitute `python launch.py` and point `--blender` at the pinned
-Blender executable or set `RUSTER_BLENDER`. For Word export from source, install
-the bundled-Python dependencies with `python tools/setup_assets.py`.
+Blender executable or set `RUSTER_BLENDER`. The packaged app includes the Python
+dependencies for compact monument export, legacy terrain image conversion, and
+Word reports. In a source checkout, install them with
+`python tools/setup_assets.py`.
 
 The one-shot commands use a temporary profile and accept saved `.ruster` and
 RustEdit `.prefab` inputs. Saved prefab IDs and transforms can be serialized
 without the Rust client or a populated asset cache. An ordinary `.map` import
-reads placements only. Use the original `.ruster` project to preserve native ground.
+reads placements only. Use the original `.ruster` project to capture native ground.
 
-- Use `--require-ground` for validation or export when the server map needs
-  native ground. Omit it if a prefab-only map is intended.
+- Use `--require-ground` to fail validation or export when the input project
+  lacks native Rust ground.
+- `--export-prefab` exports the whole saved composition. Choose `.asset` for
+  RustEdit 2 or `.prefab` for the legacy bundle. Native ground is included
+  automatically. For native terrain capture, `--terrain-width` sets the stamp
+  width in metres and defaults to fitting the placements. `--terrain-fade`
+  sets the edge fade and defaults to five metres. Legacy bundles report their
+  companion paths in `companions`.
 - Pass `--overwrite` to replace an existing output. Exports normally refuse
   existing files.
 - Parse the line beginning with `RUSTER_BATCH_RESULT ` as JSON. Blender can print
@@ -52,9 +62,10 @@ reads placements only. Use the original `.ruster` project to preserve native gro
    bounded placement and transform tools, and `get_ground_status`. Save a
    `.ruster` checkpoint with `save_project` before changing projects or stopping.
 5. Call `validate_map(require_ground=True)` for a native-ground deliverable,
-   then `export_map(path, require_ground=True)`. For Word use
-   `export_project_report(path)`. MCP output paths must be absolute and files
-   are replaced only with `overwrite=True`.
+   then `export_map(path, require_ground=True)`. For RustEdit use
+   `export_prefab(names, path)` with an `.asset` or `.prefab` destination.
+   For Word use `export_project_report(path)`. MCP output paths must be absolute
+   and files are replaced only with `overwrite=True`.
 
 Headless mode has no interactive viewport, viewport captures, or undo/redo.
 Use bounds, transforms, validation and saved checkpoints. Use the desktop

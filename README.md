@@ -28,7 +28,7 @@ Keep the application folder together. The package includes its Blender runtime a
 2. Create a new prefab composition from the welcome screen.
 3. Press **Shift+A** to browse Rust prefabs. The browser supports search, categories, favorites, and recently used assets. Enable **Hidden Assets** when looking for helpers such as volumes or spawners.
 4. Add a prefab and arrange it in the viewport. Models and materials load on demand, with progress shown in **Model Loading**.
-5. Save a `.ruster` project, then export a `.prefab` when the composition is ready for RustEdit.
+5. Save a `.ruster` project, then export a RustEdit 2 monument (`.asset`) or a legacy RustEdit bundle (`.prefab`).
 
 If you have RustEdit installed, its folder can also be selected in **Preferences > Assets** as a source for prefab names through its local `stringpool.txt`.
 
@@ -61,7 +61,8 @@ Original prefab geometry stays read-only in the composition. Shape changes come 
 | Format | Purpose |
 | --- | --- |
 | `.ruster` | Save a Rustmatics project and resume editing it later. |
-| `.prefab` | Import or export a RustEdit prefab composition with companion terrain masks in native map projects. |
+| `.asset` | Export a RustEdit 2 monument with embedded terrain. |
+| `.prefab` | Import or export a legacy RustEdit composition with companion terrain masks. |
 | `.map` | Import prefab placements; export placements plus native terrain when Rust Ground has been added. |
 | `.blend` | Export a standalone Blender scene for rendering and model work. |
 | `.docx` | Export a Word report with map validation, ground status and a prefab inventory through the CLI or MCP. |
@@ -78,17 +79,16 @@ for height, water, splat, biome, alpha and topology, with undo and project savin
 Native maps include five biome channels with explicit Jungle weights.
 
 Export a **`.map`** to include native walkable ground and its painted layers.
-The `.prefab` format remains a placement-only export. Starting Live Preview uses
-the current native ground; restart it after changing terrain layers.
+Starting Live Preview uses the current native ground. Restart it after changing
+terrain layers.
 See [native ground](docs/native-ground.md) for data and verification details.
 
-**Export Prefab** exports highlighted prefabs/groups. With nothing highlighted,
-it exports the whole composition as a RustEdit `.prefab`.
-
-In a map with native ground, **Export RustEdit Prefab** includes height, both
-splat textures, biome, alpha, and topology masks beside the `.prefab` by
-default. Keep the files together when moving the prefab to RustEdit. The export
-dialog offers a terrain width, an edge fade, and an optional PNG preview.
+The RustEdit export commands use highlighted prefabs and groups, or the whole
+composition when nothing is highlighted. **Export RustEdit 2 Monument** embeds
+height, splat, biome, alpha, and topology in one `.asset`. **Export RustEdit
+Prefab** writes those masks beside the legacy `.prefab`. Keep those files
+together when moving the prefab. Both formats are available with
+`--export-prefab` from a [headless command](docs/headless.md).
 
 Save your working project before testing an export in RustEdit or Rust. Viewport previews show assets and placement; gameplay behavior is determined by the game.
 

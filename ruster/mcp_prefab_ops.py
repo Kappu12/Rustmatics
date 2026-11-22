@@ -183,7 +183,7 @@ def dispatch(server,kind,p,bridge):
         from importlib.util import find_spec
         from . import model_export
         return {'formats':[{'id':key,'extension':model_export.FORMATS[key][1],'label':label} for key,label,_ in model_export.available_formats()],
-            'placement_formats':['.prefab','.rusterprefab','.map'],'report_formats':['.docx'] if find_spec('docx') else [],
+            'placement_formats':['.prefab','.asset','.rusterprefab','.map'],'report_formats':['.docx'] if find_spec('docx') else [],
             'model_budget':{'unique_vertices':2000000,'mesh_instances':50000}}
     if kind=='get_io_settings':
         studio,found=io_settings(p['name'],bridge)
@@ -232,8 +232,9 @@ def dispatch(server,kind,p,bridge):
                 placement.select(objects)
                 if kind=='export_prefab':
                     from . import studio
+                    from .core.rustedit_terrain import EXPORT_EXTENSIONS
                     overwrite=p.get('overwrite') is True
-                    target=bridge.file_target(p['path'],'.prefab',overwrite)
+                    target=bridge.file_target(p['path'],EXPORT_EXTENSIONS,overwrite)
                     thumbnail=p.get('preview_png')
                     if thumbnail is not None:thumbnail=bridge.file_target(thumbnail,'.png',True)
                     files=studio.export_prefab(target,include_terrain=p.get('include_terrain'),

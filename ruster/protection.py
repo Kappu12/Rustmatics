@@ -197,7 +197,8 @@ class RUSTER_MT_commands(bpy.types.Menu):
         from .ui_style import ICONS as I,action,tool_button
         layout=self.layout
         action(layout,'ruster.open');action(layout,'ruster.save')
-        action(layout,'ruster.prefab_import');action(layout,'ruster.prefab_export');action(layout,'ruster.blend_export');action(layout,'ruster.model_export')
+        action(layout,'ruster.prefab_import');action(layout,'ruster.prefab_export');action(layout,'ruster.monument_export')
+        action(layout,'ruster.blend_export');action(layout,'ruster.model_export')
         if context.scene.ruster.mode=='MAP':action(layout,'ruster.validate');action(layout,'ruster.export_map')
         layout.separator()
         action(layout,'ruster.duplicate_move');action(layout,'ruster.delete')

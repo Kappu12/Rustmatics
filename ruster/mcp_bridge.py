@@ -126,7 +126,9 @@ def file_target(path,extension,overwrite):
     target=Path(path).expanduser()
     if not target.is_absolute():raise ValueError('Provide an absolute destination path')
     target=target.resolve()
-    if target.suffix.lower()!=extension:raise ValueError('Choose a '+extension+' destination')
+    extensions = (extension,) if isinstance(extension, str) else extension
+    if target.suffix.lower() not in extensions:
+        raise ValueError('Choose a ' + ' or '.join(extensions) + ' destination')
     if target.exists() and not target.is_file():raise ValueError('Destination must be a file, not a directory')
     if target.exists() and not overwrite:raise ValueError('Destination exists; choose a new name or explicitly enable overwrite')
     return target
