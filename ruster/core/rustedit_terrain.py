@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 import math
 import os
+from io import BytesIO
 from pathlib import Path
 import struct
 import tempfile
@@ -10,10 +11,11 @@ import zlib
 import numpy as np
 
 from .layer_images import MAX_IMAGE_PIXELS
-from .terrain import BIOMES, SPLATS, TOPOLOGIES, resample
+from .terrain import BIOMES, SPLATS, TOPOLOGIES, Terrain, normalize_weights, resample
 from .wire import FormatError
 
 TERRAIN_SUFFIXES = ('.heights', '.splat0', '.splat1', '.biome', '.alpha', '.topology')
+EXPORT_EXTENSIONS = ('.prefab', '.asset')
 SUFFIXES = (*TERRAIN_SUFFIXES, '.png')
 SPLAT_MASK = (1 << len(SPLATS)) - 1
 BIOME_MASK = (1 << len(BIOMES)) - 1
@@ -109,6 +111,78 @@ def read_companions(path):
     """Keep the original PNG bytes so saved projects can re-export them."""
     return {suffix: read_png(image) for suffix in SUFFIXES
             if (image := _companion(Path(path), suffix)).is_file()}
+
+
+def decode_companions(companions, width):
+    """Decode a legacy stamp to relative native terrain and the layers it supplies."""
+    try:
+        from PIL import Image
+    except ImportError as error:
+        raise FormatError('Install Rustmatics asset dependencies to convert legacy terrain images') from error
+    from . import wire
+    from .rust_map import RustMap
+
+    images = {}
+    for suffix in TERRAIN_SUFFIXES:
+        if suffix in companions:
+            with Image.open(BytesIO(_checked_png(companions[suffix], suffix))) as image:
+                if image.width != image.height or image.width < 2 or image.n_frames != 1:
+                    raise FormatError(f'{suffix} must be a square, single-frame RustEdit terrain image')
+                images[suffix] = np.array(image.convert('RGBA'))[::-1]
+
+    world = RustMap(10, b'', [wire.encode(1, 0, width)])
+    enabled = set()
+    resolution = max((len(samples) for samples in images.values()), default=2)
+
+    def pixels(suffix):
+        samples = images.get(suffix)
+        if samples is None:
+            return np.zeros((resolution, resolution, 4), dtype='u1')
+        if len(samples) == resolution:
+            return samples
+        indices = np.rint(np.linspace(0, len(samples) - 1, resolution)).astype(int)
+        return samples[indices[:, None], indices]
+
+    height = np.full((2, 2), 16383, dtype='<i2')
+    if '.heights' in images:
+        data = images['.heights'].astype('<u2')
+        height = (data[..., 0] | (data[..., 2] << 8)).view('<i2').astype('i4') + 16383
+        if height.min() < 0 or height.max() > 32766:
+            raise FormatError('Legacy terrain heights exceed RustEdit 2’s range relative to the export pivot')
+        height = height.astype('<i2')
+        enabled.add('Height')
+    world.set_layer('terrain', height.tobytes())
+
+    splat = np.concatenate((pixels('.splat0'), pixels('.splat1')), axis=-1).transpose(2, 0, 1)
+    if {'.splat0', '.splat1'} & images.keys():
+        enabled.add('Splat')
+    else:
+        splat[4] = 255
+    if np.any(splat.sum(axis=0, dtype='u2') != 255):
+        splat = normalize_weights(splat)
+    world.set_layer('splat', splat.tobytes())
+
+    biome = pixels('.biome').transpose(2, 0, 1)
+    if '.biome' in images:
+        enabled.add('Biome')
+    else:
+        biome[1] = 255
+    # The four legacy bytes leave their remaining weight to Jungle.
+    total = biome.sum(axis=0, dtype='i2')
+    biome = np.concatenate((biome, np.maximum(255 - total, 0)[None].astype('u1')))
+    if np.any(total > 255):
+        biome = normalize_weights(biome)
+    world.set_layer('biome', biome.tobytes())
+    topology = np.ascontiguousarray(pixels('.topology')).view('<u4') & TOPOLOGY_MASK
+    if '.topology' in images:
+        enabled.add('Topology')
+    world.set_layer('topology', topology.tobytes())
+    alpha = np.full((resolution, resolution), 255, dtype='u1')
+    if '.alpha' in images:
+        alpha = np.where(pixels('.alpha')[..., 3] >= 128, 255, 0).astype('u1')
+        enabled.add('Alpha')
+    world.set_layer('alpha', alpha.tobytes())
+    return Terrain(world), enabled
 
 
 @contextmanager

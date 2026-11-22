@@ -1,8 +1,8 @@
 """Rust's LZ4Stream framing, not the incompatible modern LZ4 frame format.
 
-Reader supports compressed and raw chunks. Writer deliberately emits valid raw
-chunks. An optional native block decoder accelerates large maps; the bounded
-Python decoder remains available without asset dependencies installed.
+Reader supports compressed and raw chunks. Writers default to raw chunks and
+can opt into native block compression. The bounded Python decoder remains
+available without asset dependencies installed.
 Framing reference: MiloszKrajewski/lz4net LZ4Stream; no third-party code copied.
 """
 from .wire import FormatError, read_varint, varint
@@ -90,8 +90,17 @@ def decompress(data, max_bytes=MAX_BYTES):
     return bytes(out)
 
 
-def compress(data, block_size=1024 * 1024):
+def compress(data, block_size=1024 * 1024, *, compact=False):
     if not 0 < block_size <= MAX_CHUNK or len(data) > MAX_BYTES:
         raise FormatError("Map exceeds the supported size")
-    return b"".join(b'\x00' + varint(len(data[i:i + block_size])) + data[i:i + block_size]
-                    for i in range(0, len(data), block_size))
+    chunks = []
+    for start in range(0, len(data), block_size):
+        chunk = data[start:start + block_size]
+        size = varint(len(chunk))
+        if compact and _native_lz4 is not None:
+            packed = _native_lz4.compress(chunk, store_size=False)
+            if len(packed) + len(varint(len(packed))) < len(chunk):
+                chunks.append(b'\x01' + size + varint(len(packed)) + packed)
+                continue
+        chunks.append(b'\x00' + size + chunk)
+    return b''.join(chunks)

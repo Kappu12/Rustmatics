@@ -47,6 +47,7 @@ class RUSTER_PT_start(bpy.types.Panel):
         layout.menu('RUSTER_MT_add',text='Add Rust Prefab · Shift+A',icon=I['prefab'])
         row=layout.row(align=True)
         action(row,'ruster.save',text='Save');action(row,'ruster.prefab_export',text='Export Prefab…')
+        action(layout,'ruster.monument_export')
         row=layout.row(align=True)
         action(row,'ruster.prefab_import',text='Import Prefab…');action(row,'ruster.model_export',text='Export Models…')
         action(layout,'ruster.blend_export')
@@ -66,7 +67,8 @@ class RUSTER_MT_file(bpy.types.Menu):
         action(layout,'ruster.export_map')
         layout.operator('ruster.add_ground',icon='MESH_PLANE')
         layout.separator()
-        for op in ('ruster.prefab_import','ruster.prefab_export','ruster.blend_export','ruster.model_export'):action(layout,op)
+        for op in ('ruster.prefab_import','ruster.prefab_export','ruster.monument_export',
+                   'ruster.blend_export','ruster.model_export'):action(layout,op)
         layout.separator()
         action(layout,'ruster.setup')
         layout.separator()

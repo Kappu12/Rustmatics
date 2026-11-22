@@ -15,6 +15,7 @@ for /f "tokens=1 delims==" %%A in ("%~1") do set "ruster_option=%%A"
 if /I "%ruster_option%"=="--headless" exit /b %ruster_exit%
 if /I "%ruster_option%"=="--validate-map" exit /b %ruster_exit%
 if /I "%ruster_option%"=="--export-map" exit /b %ruster_exit%
+if /I "%ruster_option%"=="--export-prefab" exit /b %ruster_exit%
 if /I "%ruster_option%"=="--export-report" exit /b %ruster_exit%
 shift
 goto check_automation

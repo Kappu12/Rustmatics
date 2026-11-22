@@ -1,5 +1,30 @@
 # RustEdit custom prefab interchange
 
+## Export a RustEdit 2 monument
+
+Choose **Export RustEdit 2 Monument** from the File menu. The `.asset`
+contains the prefab placements and embeds height, splat, biome, alpha, and
+topology when the project has native ground. The terrain stamp blends out at
+its edge and stays within the saved ground patch.
+
+For the full saved composition, run one command from the Windows package
+directory.
+
+```bat
+Rustmatics.cmd "C:\maps\Project.ruster" --export-prefab "C:\maps\Monument.asset" --require-ground
+```
+
+Open the result directly with **File > Open** in RustEdit 2. To place it on
+another map, put the file in `CustomMonuments`, refresh **Monuments** in the
+Content Browser, and apply its terrain modifiers after placing it.
+
+Legacy `.prefab` inputs with companion images can also be converted to
+`.asset` in one command. Keep their companion images beside the input. Use
+legacy `.prefab` re-export when preserving linked IO, paths, or other
+RustEdit 1 extension records.
+
+## Legacy prefab format
+
 The `.prefab` format targets the RustEdit 1.2.19 serializer. RustEdit 2.0.16
 also reads these bundles through its legacy monument importer. Rustmatics ships
 its own implementation of the format.
@@ -24,7 +49,8 @@ links. New placement-only compositions can be edited and exported normally.
 
 ## Companion terrain files
 
-**Export RustEdit Prefab** on a native map writes these files beside the prefab:
+**Export RustEdit Prefab** and `--export-prefab` with a `.prefab` destination
+write the companion images beside the prefab when the project has native ground.
 
 | Suffix after `.prefab` | Contents |
 | --- | --- |
@@ -57,8 +83,8 @@ paths, and an explicit overwrite replaces the files of the bundle.
 
 Green Thumb was tested in RustEdit 2.0.16 with all five terrain layers enabled.
 In a test world, both `.map` export modes kept the five layers, including the
-imported Jungle biome and a separately painted Arid patch. The legacy bundle
-is the shared interchange format. RustEdit 2 saves editable maps as `.scene`
+imported Jungle biome and a separately painted Arid patch.
+RustEdit 2 saves editable maps as `.scene`
 and exports game maps as `.map`. See the [RustEdit 2 legacy import guide](https://rustedit.rusthq.com/maps/rustedit-1-maps).
 
 ## Validation

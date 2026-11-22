@@ -30,6 +30,7 @@ if (APP / 'python_modules').is_dir():
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from ruster.assets import catalog
+from ruster.core import rustedit_terrain
 from ruster.core.rust_map import RustMap
 from ruster.core.rustedit_prefab import RustEditPrefab
 from ruster.vendor.blender_mcp_client import BlenderConnection
@@ -143,6 +144,9 @@ async def exercise(profile, directory):
             terrain = await call('add_ground', size=64, biome='Jungle')
             assert terrain['present'] and terrain['biome_channels_stored'] == 5
             await call('save_project', path=str(directory / 'Ground.ruster'))
+            monument = directory / 'MCP.asset'
+            result = await call('export_prefab', names=names, path=str(monument))
+            assert Path(result['path']) == monument and monument.is_file() and not result['companions']
             native_map = directory / 'MCP.map'
             await call('export_map', path=str(native_map), require_ground=True)
             world = RustMap.load(native_map)
@@ -179,6 +183,13 @@ def check_one_shot(directory):
     rust_map = RustMap.load(target)
     mcp_map = RustMap.load(directory / 'MCP.map')
     assert rust_map.prefabs == mcp_map.prefabs and rust_map.layers == mcp_map.layers
+    monument = directory / 'One shot.asset'
+    result = run(source, '--export-prefab', monument, '--require-ground')
+    assert monument.is_file() and result['prefab_count'] == 3 and not result['companions']
+    prefab = directory / 'One shot.prefab'
+    result = run(source, '--export-prefab', prefab, '--require-ground')
+    assert len(RustEditPrefab.load(prefab).prefabs) == 3
+    assert {Path(path).suffix for path in result['companions'] if Path(path).is_file()} == set(rustedit_terrain.TERRAIN_SUFFIXES)
     report = directory / 'One shot.docx'
     assert run(source, '--export-report', report)['prefab_count'] == 3
     with ZipFile(report) as archive:
