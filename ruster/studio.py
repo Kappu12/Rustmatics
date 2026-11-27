@@ -12,7 +12,7 @@ from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, St
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 from mathutils import Matrix, Vector
 
-from . import app, scene, placement
+from . import app, scene, placement, thumbnails
 from .assets import catalog
 from .core import rustedit_terrain, wire
 from .core.asset_categories import GROUPS
@@ -440,8 +440,10 @@ def draw_prefab_menu(menu, context, category=''):
     if not data['items']:
         layout.label(text='Select a Rust installation in Assets preferences',icon='INFO')
         return
-    for uid,name,_source,weight,icon in data['items']:
-        layout.operator('ruster.place',text=name,icon=icon,search_weight=weight).uid=uid
+    for uid,name,source,weight,icon in data['items']:
+        preview = thumbnails.icon_id(uid, source)
+        layout.operator('ruster.place', text=name, icon='NONE' if preview else icon,
+                        icon_value=preview, search_weight=weight).uid = uid
 
 
 class RUSTER_OT_add_prefab(bpy.types.Operator):
@@ -613,6 +615,7 @@ class RUSTER_OT_edit_mode(bpy.types.Operator):
 
 
 def register():
+    thumbnails.register()
     _category_menus.update(('@'+key,category_menu(key,label)) for key,label,_patterns in GROUPS)
     classes = [RUSTER_OT_io_settings, RUSTER_OT_add_prefab, RUSTER_MT_add, *_category_menus.values(), RUSTER_OT_prefab_import,
                RUSTER_OT_prefab_export, RUSTER_OT_monument_export, RUSTER_OT_model_export,
@@ -645,6 +648,7 @@ def register():
 
 def unregister():
     global _menu_builder,_menu_signature
+    thumbnails.unregister()
     if bpy.app.timers.is_registered(warm_prefab_menu):bpy.app.timers.unregister(warm_prefab_menu)
     if _menu_builder is not None:_menu_builder.close()
     _menu_builder=None;_menu_signature=None

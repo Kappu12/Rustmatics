@@ -1,5 +1,5 @@
 """Actual Shift+A opens categories; immediate typing searches all metadata."""
-import os,sys,tempfile,traceback
+import gzip,json,os,shutil,sys,tempfile,traceback
 from pathlib import Path
 from contextlib import closing
 import bpy
@@ -8,8 +8,17 @@ if '--' in sys.argv:sys.path.insert(0,sys.argv[sys.argv.index('--')+1])
 temporary=tempfile.TemporaryDirectory(prefix='ruster-search-')
 os.environ['RUSTER_USER_DIR']=temporary.name
 import ruster
-from ruster import app,scene,studio
+from ruster import app,scene,studio,thumbnails
 from ruster.assets import catalog
+from ruster.core import settings
+from tests.fixtures import triangle_asset
+editor=Path(temporary.name)/'RustEdit'
+preview_path='assets/bundled/prefabs/modding/cubes/tiled/cube_tiled_dev_01.prefab'
+png=editor/'PreviewImages'/(preview_path+'.png')
+png.parent.mkdir(parents=True)
+shutil.copyfile(ROOT/'ruster/branding/icon-white.png',png)
+(editor/'stringpool.txt').touch()
+settings.save({'rustedit_install':str(editor)})
 ruster.register()
 bpy.context.window_manager.keyconfigs.update()
 requests=[]
@@ -27,6 +36,10 @@ with closing(catalog.connect(scene.cache_dir())) as db:
     rows += [(200+i,f'assets/prefabs/props/page_item_{i:02}.prefab') for i in range(16)]
     db.executemany('INSERT INTO names VALUES(?,?)',rows)
     db.execute('INSERT INTO assets SELECT path,?,?,uid FROM names WHERE uid!=51',('bundle','file'));db.commit()
+    model=scene.cache_dir()/'prefabs/215.json.gz'
+    model.parent.mkdir(exist_ok=True)
+    model.write_bytes(gzip.compress(json.dumps(triangle_asset(215)).encode()))
+assert bpy.ops.ruster.load_thumbnail(uid='215')=={'FINISHED'}
 queries=[('dev',42,'add',''),('dev cube',42,'add',''),('DEV',42,'add',''),
          ('CuBe DeV',42,'add',''),('01 cube dev',42,'add',''),
          ('stone wall high external',44,'add',''),('io',147092032,'add',''),
@@ -69,6 +82,9 @@ def step():
                     window.event_simulate(type='A',value='RELEASE',shift=True,x=x,y=y)
                     window.event_simulate(type='LEFT_SHIFT',value='RELEASE',x=x,y=y)
             elif phase==2:
+                if state['case']==0:
+                    assert thumbnails.icon_id(42,preview_path)>0,'Missing local PNG icon'
+                    assert thumbnails.icon_id(43,rows[1][1])==0,'Missing PNG should use native fallback'
                 if state['case']==0 and (output:=os.environ.get('RUSTER_SEARCH_SCREENSHOTS')):
                     path=Path(output);path.mkdir(parents=True,exist_ok=True)
                     bpy.ops.screen.screenshot(filepath=str(path/'native-prefab-categories.png'))
@@ -99,6 +115,9 @@ def step():
                 if roots:bpy.data.objects.remove(roots[0],do_unlink=True)
                 state['case']+=1
                 if state['case']==len(queries):
+                    assert thumbnails.icon_id(215,rows[-1][1])>0,'Missing generated thumbnail'
+                    pixels=thumbnails._previews['215']
+                    assert pixels.image_size[:]==(24,24) and any(pixels.icon_pixels[:])
                     ruster.unregister();temporary.cleanup()
                     print('RUSTER_GUI_NATIVE_PREFAB_SEARCH_OK',flush=True)
                     bpy.ops.wm.quit_blender();return None

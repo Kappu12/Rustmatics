@@ -62,7 +62,7 @@ def navigation(self,context):
 class RUSTER_PG_preferences(bpy.types.PropertyGroup):
     section:EnumProperty(items=SECTIONS,name='Preferences Section',options={'SKIP_SAVE'},update=changed)
     directory:StringProperty(name='Rust Installation',description='Game folder containing the Rust executable and Bundles folder',subtype='DIR_PATH',options={'SKIP_SAVE'})
-    rustedit:StringProperty(name='RustEdit Folder',description='Read the locally installed prefab string pool; no models are loaded',subtype='DIR_PATH',options={'SKIP_SAVE'})
+    rustedit:StringProperty(name='RustEdit Folder',description='Read local prefab names and available preview images',subtype='DIR_PATH',options={'SKIP_SAVE'})
 
 
 class RUSTER_OT_catalog_source(bpy.types.Operator):
@@ -74,6 +74,8 @@ class RUSTER_OT_catalog_source(bpy.types.Operator):
         if not root:self.report({'ERROR'},'Choose RustEdit folder containing stringpool.txt');return {'CANCELLED'}
         config=settings.load();config['rustedit_install']=str(root);settings.save(config)
         context.window_manager.ruster_preferences.rustedit=str(root)
+        from . import thumbnails
+        if not bpy.app.background:thumbnails.refresh()
         try:app.start_job('index');return {'FINISHED'}
         except Exception as error:self.report({'ERROR'},str(error));return {'CANCELLED'}
 
@@ -155,7 +157,7 @@ class RUSTER_PT_preferences_assets(RustPreferences,CenterAlignMixIn,bpy.types.Pa
         layout.separator()
         fields=properties(layout.column());fields.prop(state,'rustedit')
         layout.operator('ruster.catalog_source')
-        wrapped(layout,context,'Browsing reads the shipped scene manifest and local RustEdit string pool. Models load only when requested; no full bundle index runs.',width=width)
+        wrapped(layout,context,'The catalog uses the Rust scene manifest and RustEdit prefab names. Library thumbnails are cached in the background. Placed models load on demand.',width=width)
         layout.separator()
         wrapped(layout,context,'Asset cache: '+str(scene.cache_dir()),width=width)
         wrapped(layout,context,'Rust installation changes are saved when you click Apply Installation.',width=width)

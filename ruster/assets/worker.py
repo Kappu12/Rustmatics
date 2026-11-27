@@ -64,7 +64,8 @@ def run_child(action, install, cache, **options):
     command = [sys.executable, str(Path(__file__).resolve()), action,
                '--install', str(install), '--cache', str(cache), '--parent-pid', str(os.getpid())]
     for key, value in options.items():
-        command += ['--' + key.replace('_', '-'), str(value)]
+        option = '--' + key.replace('_', '-')
+        command += [option] if value is True else [option, str(value)]
     kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW} if sys.platform == 'win32' else {}
     try:
         result = subprocess.run(command, timeout=120, **kwargs)
@@ -442,7 +443,15 @@ def export_prefab(env, root_reader, output, uid, asset_path, cache_signature='')
     return warnings
 
 
-def extract_one(install, cache, uid):
+def bundle_inventory(root):
+    inventory = []
+    for path in bundle_files(root):
+        stat = path.stat()
+        inventory.append((str(path.relative_to(root)), stat.st_size, stat.st_mtime_ns))
+    return inventory
+
+
+def extract_one(install, cache, uid, inventory=None):
     from ruster.assets.streaming import streamed_bundles
     entry=find(cache,uid)
     selected=set()
@@ -450,25 +459,26 @@ def extract_one(install, cache, uid):
         selected.add('buildplayer-'+entry[2][7:].lower())
     with streamed_bundles(lambda name: name.lower() in selected or name.lower().endswith(('.ress','.resource')),
                           skip_containers=True) as UnityPy:
-        return extract_batch(UnityPy, install, cache, [uid])
+        return extract_batch(UnityPy, install, cache, [uid], inventory)
 
 
-def extract_batch(UnityPy, install, cache, ids):
+def extract_batch(UnityPy, install, cache, ids, inventory=None):
     root = validate_install(install)
     cache = Path(cache)
     target = cache / 'prefabs'
     target.mkdir(parents=True, exist_ok=True)
     failures, done = [], 0
     current_bundle, env = None, None
+    if inventory is None:
+        inventory = bundle_inventory(root)
     with connect(cache) as db:
         source=db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='catalog_metadata'").fetchone()
         catalog_source=db.execute('SELECT value FROM catalog_metadata').fetchall() if source else []
-        catalog_signature=hashlib.sha256(repr((catalog_source,[(str(p.relative_to(root)),p.stat().st_size,p.stat().st_mtime_ns)
-                                                              for p in bundle_files(root)])).encode()).hexdigest()
+        catalog_signature=hashlib.sha256(repr((catalog_source,inventory)).encode()).hexdigest()
     from ruster.assets import locations
     cab_bundles=locations.prepare(cache,catalog_signature)
     discovered_cabs={};discovered_roots=[]
-    candidates=iter(sorted(bundle_files(root),key=lambda p:('/shared/' not in p.as_posix(),p.as_posix())))
+    candidates=iter(sorted((root/name for name, _, _ in inventory),key=lambda p:('/shared/' not in p.as_posix(),p.as_posix())))
 
     class LocalEnvironment(UnityPy.Environment):
         def resolve_prefab(self,guid):
@@ -628,6 +638,7 @@ def main():
     parser.add_argument('--ids-file')
     parser.add_argument('--bundle')
     parser.add_argument('--uid', type=int)
+    parser.add_argument('--use-thumbnail-inventory', action='store_true')
     parser.add_argument('--report')
     parser.add_argument('--rustedit')
     parser.add_argument('--parent-pid', type=int)
@@ -642,7 +653,12 @@ def main():
         if args.action == 'index-bundle':
             index_bundle(args.install, args.cache, args.bundle)
         elif args.action == 'extract-one':
-            result = extract_one(args.install, args.cache, args.uid)
+            inventory = None
+            if args.use_thumbnail_inventory:
+                inventory = [tuple(row) for row in json.loads((Path(args.cache)/'bundles.json').read_text())]
+                if any(Path(name).anchor or '..' in Path(name).parts for name, _, _ in inventory):
+                    raise ValueError('Invalid path in thumbnail bundle inventory')
+            result = extract_one(args.install, args.cache, args.uid, inventory)
             atomic_write(args.report, json.dumps(result).encode())
         elif args.action == 'index':
             index(args.install, args.cache,args.rustedit)

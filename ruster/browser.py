@@ -108,8 +108,15 @@ class RUSTER_OT_prefab_details(bpy.types.Operator):
         from .ui_style import ICONS as I,wrapped
         name=display_name(found[0])
         cached=(scene.cache_dir()/'prefabs'/f'{uid}.json.gz').is_file()
+        from . import thumbnails
+        thumbnails.request(uid)
         def draw(popup,draw_context):
             layout=popup.layout
+            preview = thumbnails.icon_id(uid, found[0])
+            if preview:
+                layout.template_icon(icon_value=preview, scale=1.5)
+            elif found[1]:
+                layout.operator('ruster.load_thumbnail',text='Load Thumbnail',icon='IMAGE_DATA').uid=str(uid)
             wrapped(layout,draw_context,name,icon='prefab',width=400)
             layout.label(text=f'Prefab ID: {uid}')
             wrapped(layout,draw_context,found[0],width=400)
@@ -128,6 +135,28 @@ class RUSTER_OT_prefab_details(bpy.types.Operator):
             row=layout.row();row.enabled=bool(found[1])
             row.operator('ruster.place',text='Place at 3D Cursor',icon=I['prefab']).uid=str(uid)
         context.window_manager.popup_menu(draw,title='Prefab Details')
+        return {'FINISHED'}
+
+
+class RUSTER_OT_load_thumbnail(bpy.types.Operator):
+    bl_idname='ruster.load_thumbnail'
+    bl_label='Load Prefab Thumbnail'
+    bl_description='Load this model to create a browser preview without placing it'
+    uid:StringProperty()
+
+    def execute(self,context):
+        from . import app, thumbnails
+        try:
+            uid=int(self.uid)
+        except ValueError:
+            self.report({'ERROR'},'Invalid prefab ID')
+            return {'CANCELLED'}
+        if (scene.cache_dir()/'prefabs'/f'{uid}.json.gz').is_file():
+            thumbnails.converted(uid)
+        elif not app.request_assets([uid]):
+            self.report({'ERROR'},context.scene.ruster.asset_status)
+            return {'CANCELLED'}
+        self.report({'INFO'},'Requested prefab thumbnail')
         return {'FINISHED'}
 
 
@@ -168,7 +197,7 @@ class RUSTER_OT_copy_prefab(bpy.types.Operator):
 
 
 def register():
-    for cls in (RUSTER_OT_favorite,RUSTER_OT_copy_prefab,RUSTER_OT_clear_filters,RUSTER_OT_prefab_details):
+    for cls in (RUSTER_OT_favorite,RUSTER_OT_copy_prefab,RUSTER_OT_clear_filters,RUSTER_OT_prefab_details,RUSTER_OT_load_thumbnail):
         bpy.utils.register_class(cls);_classes.append(cls)
 
 

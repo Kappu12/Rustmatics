@@ -32,6 +32,12 @@ Keep the application folder together. The package includes its Blender runtime a
 
 If you have RustEdit installed, its folder can also be selected in **Preferences > Assets** as a source for prefab names through its local `stringpool.txt`.
 
+Shift+A and the Prefab Browser use RustEdit’s local `PreviewImages` when
+available. While the editor is open, a background worker fills a local cache
+of 24 × 24 PNGs for the installed prefab library. It processes one model at a
+time, skips helpers with no visible mesh, and resumes on the next launch.
+Open the dropdown again to see newly cached icons.
+
 ## Build in the viewport
 
 Use Blender's object controls to move, rotate, and scale placements. **G**, **R**, and **S** start transforms; axis constraints and numeric input work as usual. **Shift+D** duplicates a placement, and **F3** opens command search. The Outliner provides another way to select and organize the composition.

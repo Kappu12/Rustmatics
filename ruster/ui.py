@@ -1,6 +1,6 @@
 """Native Blender panels and menus, sharing Blender's icon and theme vocabulary."""
 import bpy
-from . import scene,browser
+from . import scene,browser,thumbnails
 from .assets import catalog
 from .ui_style import ICONS as I,action,properties,section,wrapped,tool_button,duplicate_button
 
@@ -173,7 +173,10 @@ class RUSTER_PT_prefabs(MapPanel,bpy.types.Panel):
             row.operator('ruster.favorite',text='',icon=I['favorite_on' if uid in favorites else 'favorite_off'],emboss=False).uid=str(uid)
             body=row.row(align=True);body.enabled=bool(available)
             from .core.asset_names import display_name
-            body.operator('ruster.place',text=display_name(path),icon=I['prefab']).uid=str(uid)
+            thumbnails.request(uid)
+            preview = thumbnails.icon_id(uid, path)
+            body.operator('ruster.place', text=display_name(path), icon='NONE' if preview else I['prefab'],
+                          icon_value=preview).uid=str(uid)
             if is_map(context):body.operator('ruster.paint_asset',text='',icon=I['prefab_brush']).uid=str(uid)
             row.operator('ruster.prefab_details',text='',icon=I['info']).uid=str(uid)
         if matches:

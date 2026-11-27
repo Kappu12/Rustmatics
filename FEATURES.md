@@ -67,7 +67,7 @@ Legacy map projects without native ground still recover their prefab composition
 
 Further work includes broader current-game asset coverage, exact engine shaders,
 particles/animation and collision behavior, live-server validation, new wiring and
-complete extension reference remapping, thumbnails/palette presets, and signed
+complete extension reference remapping, palette presets, and signed
 macOS distributions. Preserving unknown bytes does not prove cloned or deleted
 linked entities remain valid. Blender render bounds are not game collision bounds.
 
