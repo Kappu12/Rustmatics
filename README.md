@@ -32,12 +32,11 @@ Keep the application folder together. The package includes its Blender runtime a
 
 If you have RustEdit installed, its folder can also be selected in **Preferences > Assets** as a source for prefab names through its local `stringpool.txt`.
 
-Shift+A search and the Prefab Browser show thumbnails from RustEdit’s local
-`PreviewImages` folder when available. Rustmatics also renders thumbnails for
-cached models as you browse or place them. Generated PNGs are 24 × 24 pixels.
-Click the info button next to a sidebar result to inspect it. For a model you
-haven’t loaded yet, choose **Load Thumbnail** there to preview it without
-adding it to the composition.
+Shift+A and the Prefab Browser use RustEdit’s local `PreviewImages` when
+available. While the editor is open, a background worker fills a local cache
+of 24 × 24 PNGs for the installed prefab library. It processes one model at a
+time, skips helpers with no visible mesh, and resumes on the next launch.
+Open the dropdown again to see newly cached icons.
 
 ## Build in the viewport
 

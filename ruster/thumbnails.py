@@ -10,6 +10,7 @@ import bpy.utils.previews
 
 from . import scene
 from .assets import THUMBNAIL_SIZE
+from .assets import thumbnail_library
 from .assets.metadata import rustedit_root
 from .core import palettes, settings
 
@@ -19,6 +20,12 @@ _pending = {}
 _checked = set()
 _job = None
 _folder = Path('thumbnails') / str(THUMBNAIL_SIZE)
+_library = None
+_library_icons = None
+_library_process = None
+_library_cursor = 0
+_check_install_at = 0.
+_next_pass = 0.
 
 
 def request(uid):
@@ -38,7 +45,86 @@ def icon_id(uid, asset_path):
     if _previews is None:
         return 0
     image = _previews.get(asset_path.casefold()) or _previews.get(str(uid))
+    if image is None and _library_icons is not None:
+        image = _library_icons.get(str(uid))
     return image.icon_id if image is not None else 0
+
+
+def _close_library():
+    global _library, _library_icons, _library_cursor, _library_process, _next_pass, _check_install_at
+    if _library_process is not None:
+        if _library_process.poll() is None:
+            _library_process.terminate()
+        try:
+            _library_process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            _library_process.kill()
+            _library_process.wait()
+        _library_process = None
+    if _library_icons is not None:
+        bpy.utils.previews.remove(_library_icons)
+        _library_icons = None
+    _library = None
+    _library_cursor = 0
+    _next_pass = _check_install_at = 0.
+
+
+def _poll_library():
+    global _library, _library_icons, _library_cursor, _library_process, _next_pass, _check_install_at
+    from . import app
+    cache = scene.cache_dir()
+    now = time.monotonic()
+    if _library_process is not None and (code := _library_process.poll()) is not None:
+        _library_process = None
+        _next_pass = now + (3600 if code == 0 else 30)
+    if now >= _check_install_at:
+        config = settings.load()
+        folder = None
+        if config.get('rust_install') and (cache/'catalog.sqlite3').is_file():
+            try:
+                install = settings.validate_install(config['rust_install'])
+                folder = thumbnail_library.directory(cache, install)
+            except (OSError, ValueError):
+                pass
+        if folder != _library:
+            _close_library()
+            _library = folder
+            if folder:
+                _library_icons = bpy.utils.previews.new()
+        _check_install_at = now + 5.
+        if folder and _library_process is None and now >= _next_pass and app._job is None:
+            folder.mkdir(parents=True, exist_ok=True)
+            command = [app.worker_python(), str(Path(thumbnail_library.__file__)),
+                       str(cache), str(install), bpy.app.binary_path, str(folder),
+                       config.get('rustedit_install') or '', str(os.getpid())]
+            flags = (subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS) if os.name == 'nt' else 0
+            with (folder/'worker.log').open('a', encoding='utf-8') as log:
+                _library_process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log,
+                                                    stderr=subprocess.STDOUT, creationflags=flags)
+    if _library:
+        rows = thumbnail_library.ready_since(_library, _library_cursor, 12)
+        for seq, uid in rows:
+            _library_cursor = seq
+            key = str(uid)
+            if key in _library_icons:
+                del _library_icons[key]
+            image = _library_icons.load(key, str(_library/f'{uid}.png'), 'IMAGE')
+            if not image.icon_size[0]:
+                del _library_icons[key]
+            if time.monotonic() - now >= .004:
+                break
+        if rows:
+            app.redraw()
+            return .05
+    return 1.
+
+
+def preload_library():
+    try:
+        return _poll_library()
+    except (sqlite3.Error, OSError, ValueError, RuntimeError):
+        # A simultaneous catalog refresh or temporarily missing install can recover.
+        return 5.
 
 
 def _load(key, path):
@@ -91,6 +177,7 @@ def _stop_worker():
 def refresh():
     global _scanner, _previews
     _stop_worker()
+    _close_library()
     if _previews is not None:
         bpy.utils.previews.remove(_previews)
     _previews = bpy.utils.previews.new()
@@ -105,6 +192,8 @@ def refresh():
 def _prepare(cache, uid):
     global _job
     from .assets import catalog
+    if _library_icons is not None and uid in _library_icons:
+        return
     target = cache / _folder / f'{uid}.png'
     if _current(cache, uid, target):
         if uid not in _previews:
@@ -168,12 +257,16 @@ def register():
     if not bpy.app.background:
         refresh()
         bpy.app.timers.register(tick, first_interval=.1, persistent=True)
+        bpy.app.timers.register(preload_library, first_interval=2., persistent=True)
 
 
 def unregister():
     global _scanner, _previews
     if bpy.app.timers.is_registered(tick):
         bpy.app.timers.unregister(tick)
+    if bpy.app.timers.is_registered(preload_library):
+        bpy.app.timers.unregister(preload_library)
+    _close_library()
     _stop_worker()
     _scanner = None
     if _previews is not None:
