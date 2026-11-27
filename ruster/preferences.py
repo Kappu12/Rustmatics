@@ -62,7 +62,7 @@ def navigation(self,context):
 class RUSTER_PG_preferences(bpy.types.PropertyGroup):
     section:EnumProperty(items=SECTIONS,name='Preferences Section',options={'SKIP_SAVE'},update=changed)
     directory:StringProperty(name='Rust Installation',description='Game folder containing the Rust executable and Bundles folder',subtype='DIR_PATH',options={'SKIP_SAVE'})
-    rustedit:StringProperty(name='RustEdit Folder',description='Read the locally installed prefab string pool; no models are loaded',subtype='DIR_PATH',options={'SKIP_SAVE'})
+    rustedit:StringProperty(name='RustEdit Folder',description='Read local prefab names and available preview images',subtype='DIR_PATH',options={'SKIP_SAVE'})
 
 
 class RUSTER_OT_catalog_source(bpy.types.Operator):
@@ -74,6 +74,8 @@ class RUSTER_OT_catalog_source(bpy.types.Operator):
         if not root:self.report({'ERROR'},'Choose RustEdit folder containing stringpool.txt');return {'CANCELLED'}
         config=settings.load();config['rustedit_install']=str(root);settings.save(config)
         context.window_manager.ruster_preferences.rustedit=str(root)
+        from . import thumbnails
+        if not bpy.app.background:thumbnails.refresh()
         try:app.start_job('index');return {'FINISHED'}
         except Exception as error:self.report({'ERROR'},str(error));return {'CANCELLED'}
 

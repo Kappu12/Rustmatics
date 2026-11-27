@@ -229,6 +229,9 @@ def poll_job():
                 if obj.get('ruster_model_error_kind') in {'PREVIEW','PREVIEW_UPGRADE'}:del obj['ruster_model_error_kind']
             elif code:obj['ruster_model_error']=state.asset_status
     if action=='extract' and not _job_cancelled:
+        from . import thumbnails
+        for uid in completed_ids:
+            thumbnails.converted(uid)
         waiting=set(_visual_queue)
         _visual_queue.extend(sorted({int(obj['ruster_uid']) for obj in scene.prefab_roots()} & completed_ids-waiting))
         state.busy=bool(_visual_queue)
@@ -862,6 +865,8 @@ class RUSTER_OT_place(bpy.types.Operator):
             if obj.get('ruster_visual'):frame_first_model(obj)
             if not obj.get('ruster_visual') and not obj.get('ruster_marker'):request_missing_visuals([obj])
             from .core import palettes
+            from . import thumbnails
+            thumbnails.request(uid)
             try:settings.save(palettes.remember(settings.load(),uid))
             except OSError:self.report({'WARNING'},'Prefab placed, but the recent list could not be saved')
             return {'FINISHED'}

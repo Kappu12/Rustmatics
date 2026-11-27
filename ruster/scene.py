@@ -267,7 +267,7 @@ def model_asset_key(uid,signature=None):
     return str(uid)+(':'+token if token else '')+':view4'
 
 
-def attach_visual(root,force=False,prepared=False):
+def attach_visual(root,force=False,prepared=False,*,transient=False):
     if root.get('ruster_visual') and not force:
         return True
     # Also upgrade unresolved placements restored from older saved projects.
@@ -515,7 +515,8 @@ def attach_visual(root,force=False,prepared=False):
     if asset.get('preview'):collection['ruster_preview']=json.dumps(asset['preview'])
     root.instance_type = 'COLLECTION'
     from .protection import freeze
-    root.instance_collection = freeze(collection,root['ruster_uid'],asset_key,verified=True)
+    # A disposable thumbnail scene can render the local collection directly.
+    root.instance_collection = collection if transient else freeze(collection,root['ruster_uid'],asset_key,verified=True)
     model_attached(root)
     return True
 

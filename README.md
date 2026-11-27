@@ -32,6 +32,13 @@ Keep the application folder together. The package includes its Blender runtime a
 
 If you have RustEdit installed, its folder can also be selected in **Preferences > Assets** as a source for prefab names through its local `stringpool.txt`.
 
+Shift+A search and the Prefab Browser show thumbnails from RustEdit’s local
+`PreviewImages` folder when available. Rustmatics also renders thumbnails for
+cached models as you browse or place them. Generated PNGs are 24 × 24 pixels.
+Click the info button next to a sidebar result to inspect it. For a model you
+haven’t loaded yet, choose **Load Thumbnail** there to preview it without
+adding it to the composition.
+
 ## Build in the viewport
 
 Use Blender's object controls to move, rotate, and scale placements. **G**, **R**, and **S** start transforms; axis constraints and numeric input work as usual. **Shift+D** duplicates a placement, and **F3** opens command search. The Outliner provides another way to select and organize the composition.
